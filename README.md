@@ -1,4 +1,5 @@
 # Inventory Management Dashboard
+## Live Link : https://inventorymanagementdashboard-6sdhkazti7hbjhpjx8wdt4.streamlit.app/
 
 A Streamlit dashboard for monitoring warehouse inventory health, reorder risks, supplier exposure, and inventory valuation. The sample data is synthetic, but shaped like a realistic small-business inventory ledger with healthy, low-stock, and out-of-stock SKUs.
 
@@ -41,6 +42,8 @@ The app will open in your browser. If it does not open automatically, Streamlit 
 4. Deploy. Streamlit Community Cloud will install packages from `Dashboard/requirements.txt`.
 
 GitHub Pages cannot host this app because GitHub Pages only serves static sites, while Streamlit requires a running Python server.
+
+
 
 ### Alternatives
 
