@@ -1,5 +1,6 @@
 from pathlib import Path
 import base64
+from html import escape
 import io
 import math
 import struct
@@ -65,15 +66,120 @@ def build_order_jingle() -> str:
     return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def play_order_jingle() -> None:
+def render_order_button(item_count: int, reorder_units: int) -> None:
     encoded_audio = build_order_jingle()
     components.html(
         f"""
-        <audio autoplay>
-            <source src="data:audio/wav;base64,{encoded_audio}" type="audio/wav">
-        </audio>
+        <style>
+            .order-action {{
+                align-items: center;
+                background: #111827;
+                border: 0;
+                border-radius: 8px;
+                color: #ffffff;
+                cursor: pointer;
+                display: flex;
+                font: 700 15px/1.2 Arial, sans-serif;
+                justify-content: center;
+                min-height: 46px;
+                width: 100%;
+            }}
+            .order-action:hover {{
+                background: #1f2937;
+            }}
+            .order-message {{
+                color: #166534;
+                display: none;
+                font: 700 14px/1.4 Arial, sans-serif;
+                margin-top: 10px;
+            }}
+        </style>
+        <button class="order-action" id="place-order">
+            Place reorder for {item_count:,} item(s)
+        </button>
+        <div class="order-message" id="order-message">
+            Order placed for {reorder_units:,} suggested units.
+        </div>
+        <script>
+            const button = document.getElementById("place-order");
+            const message = document.getElementById("order-message");
+            button.addEventListener("click", async () => {{
+                const audio = new Audio("data:audio/wav;base64,{encoded_audio}");
+                audio.volume = 0.75;
+                try {{
+                    await audio.play();
+                }} catch (error) {{
+                    console.log("Audio playback was blocked by the browser.", error);
+                }}
+                message.style.display = "block";
+                button.textContent = "Order placed";
+                button.style.background = "#166534";
+            }});
+        </script>
         """,
-        height=0,
+        height=96,
+    )
+
+
+def render_low_stock_rows(data: pd.DataFrame) -> None:
+    rows = []
+    for _, row in data.iterrows():
+        status_class = "out" if row["Quantity_On_Hand"] <= 0 else "low"
+        rows.append(
+            f"""
+            <div class="product-row">
+                <div class="product-main">
+                    <span class="sku-pill">{escape(str(row["SKU"]))}</span>
+                    <strong>{escape(str(row["Product_Name"]))}</strong>
+                    <span>{escape(str(row["Category"]))} | {escape(str(row["Supplier"]))}</span>
+                </div>
+                <div class="product-metrics">
+                    <span class="stock-chip {status_class}">{escape(str(row["Stock_Status"]))}</span>
+                    <span><b>{int(row["Quantity_On_Hand"]):,}</b> on hand</span>
+                    <span><b>{int(row["Units_Short"]):,}</b> short</span>
+                    <span><b>{int(row["Suggested_Reorder_Qty"]):,}</b> reorder</span>
+                    <span><b>{int(row["Lead_Time_Days"]):,}</b> day lead</span>
+                </div>
+            </div>
+            """
+        )
+
+    st.markdown(
+        f"""
+        <div class="product-list">
+            {''.join(rows)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_rotating_banner(data: pd.DataFrame, low_stock_count: int, out_of_stock_count: int) -> None:
+    top_category = (
+        data.groupby("Category")["Inventory_Value"].sum().sort_values(ascending=False).index[0]
+        if not data.empty
+        else "Inventory"
+    )
+    st.markdown(
+        f"""
+        <div class="rotating-banner">
+            <div class="banner-track">
+                <div class="banner-slide">
+                    <strong>{low_stock_count:,} low-stock item(s)</strong>
+                    <span>Review reorder priorities before the next supplier cycle.</span>
+                </div>
+                <div class="banner-slide">
+                    <strong>{out_of_stock_count:,} out-of-stock item(s)</strong>
+                    <span>Focus urgent orders where sales can be blocked.</span>
+                </div>
+                <div class="banner-slide">
+                    <strong>{escape(str(top_category))} leads value</strong>
+                    <span>Keep an eye on category concentration and cash exposure.</span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
@@ -192,7 +298,41 @@ st.markdown(
             font-size: 1rem;
             margin-bottom: 1.25rem;
         }
+        .rotating-banner {
+            background: linear-gradient(90deg, #111827, #134e4a, #7c2d12);
+            border-radius: 8px;
+            color: #ffffff;
+            margin: 0.2rem 0 1.1rem;
+            min-height: 72px;
+            overflow: hidden;
+            position: relative;
+        }
+        .banner-track {
+            animation: rotateBanner 15s infinite;
+        }
+        .banner-slide {
+            align-items: center;
+            display: flex;
+            gap: 0.85rem;
+            min-height: 72px;
+            padding: 0.9rem 1.1rem;
+        }
+        .banner-slide strong {
+            font-size: 1.05rem;
+            white-space: nowrap;
+        }
+        .banner-slide span {
+            color: #e5e7eb;
+            font-size: 0.95rem;
+        }
+        @keyframes rotateBanner {
+            0%, 28% { transform: translateY(0); }
+            33%, 61% { transform: translateY(-72px); }
+            66%, 94% { transform: translateY(-144px); }
+            100% { transform: translateY(0); }
+        }
         .kpi-card {
+            animation: riseIn 0.45s ease both;
             border: 1px solid #e5e7eb;
             border-left: 5px solid #2563eb;
             border-radius: 8px;
@@ -247,6 +387,100 @@ st.markdown(
             border: 1px solid #e5e7eb;
             border-radius: 8px;
         }
+        .product-list {
+            display: grid;
+            gap: 0.65rem;
+            margin-bottom: 0.8rem;
+        }
+        .product-row {
+            animation: riseIn 0.35s ease both;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-left: 5px solid #ea580c;
+            border-radius: 8px;
+            display: grid;
+            gap: 0.8rem;
+            grid-template-columns: minmax(220px, 1.4fr) minmax(320px, 2fr);
+            padding: 0.85rem 1rem;
+        }
+        .product-main {
+            display: grid;
+            gap: 0.2rem;
+            min-width: 0;
+        }
+        .product-main strong {
+            color: #111827;
+            overflow-wrap: anywhere;
+        }
+        .product-main span:last-child {
+            color: #6b7280;
+            font-size: 0.88rem;
+            overflow-wrap: anywhere;
+        }
+        .sku-pill,
+        .stock-chip {
+            border-radius: 999px;
+            display: inline-flex;
+            font-size: 0.78rem;
+            font-weight: 750;
+            justify-content: center;
+            padding: 0.18rem 0.5rem;
+            width: fit-content;
+        }
+        .sku-pill {
+            background: #e0f2fe;
+            color: #075985;
+        }
+        .stock-chip.low {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+        .stock-chip.out {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .product-metrics {
+            align-items: center;
+            display: grid;
+            gap: 0.45rem;
+            grid-template-columns: repeat(5, minmax(86px, 1fr));
+        }
+        .product-metrics span {
+            background: #f9fafb;
+            border: 1px solid #eef2f7;
+            border-radius: 8px;
+            color: #374151;
+            font-size: 0.86rem;
+            padding: 0.45rem 0.55rem;
+            text-align: center;
+        }
+        @keyframes riseIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @media (max-width: 900px) {
+            .banner-slide {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 0.2rem;
+                justify-content: center;
+            }
+            .banner-slide strong {
+                white-space: normal;
+            }
+            .product-row {
+                grid-template-columns: 1fr;
+            }
+            .product-metrics {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -255,6 +489,14 @@ st.markdown(
 inventory = load_data()
 
 with st.sidebar:
+    st.header("Navigation")
+    selected_view = st.radio(
+        "Dashboard section",
+        ["Stock Levels", "Category Analysis", "Supplier Analysis", "Inventory Valuation"],
+        index=0,
+    )
+
+    st.divider()
     st.header("Filters")
     categories = sorted(inventory["Category"].dropna().unique())
     suppliers = sorted(inventory["Supplier"].dropna().unique())
@@ -298,6 +540,8 @@ if filtered.empty:
 low_stock = filtered[filtered["Quantity_On_Hand"] <= filtered["Reorder_Level"]].copy()
 out_of_stock = filtered[filtered["Quantity_On_Hand"] <= 0].copy()
 
+render_rotating_banner(filtered, len(low_stock), len(out_of_stock))
+
 kpi_columns = st.columns(5)
 with kpi_columns[0]:
     kpi_card("Total SKUs", f"{filtered['SKU'].nunique():,}", "unique products")
@@ -336,26 +580,15 @@ else:
         "Units_Short",
         "Suggested_Reorder_Qty",
         "Lead_Time_Days",
+        "Stock_Status",
     ]
-    st.dataframe(
-        style_inventory_table(low_stock[alert_columns].sort_values(["Units_Short", "Lead_Time_Days"], ascending=False)),
-        use_container_width=True,
-        hide_index=True,
-    )
+    sorted_alerts = low_stock[alert_columns].sort_values(["Units_Short", "Lead_Time_Days"], ascending=False)
+    render_low_stock_rows(sorted_alerts)
     reorder_units = int(low_stock["Suggested_Reorder_Qty"].sum())
-    if st.button(
-        f"Place reorder for {len(low_stock):,} item(s)",
-        type="primary",
-        use_container_width=True,
-    ):
-        st.success(f"Order placed for {reorder_units:,} suggested units.")
-        play_order_jingle()
+    render_order_button(len(low_stock), reorder_units)
 
-stock_tab, category_tab, supplier_tab, valuation_tab = st.tabs(
-    ["Stock Levels", "Category Analysis", "Supplier Analysis", "Inventory Valuation"]
-)
-
-with stock_tab:
+if selected_view == "Stock Levels":
+    st.subheader("Stock Levels")
     left, right = st.columns([1.15, 1])
     with left:
         stock_chart_data = filtered.sort_values("Quantity_On_Hand", ascending=True).tail(25)
@@ -376,7 +609,7 @@ with stock_tab:
         fig_stock.update_layout(height=650, yaxis_title="", xaxis_title="Units on hand")
         st.plotly_chart(fig_stock, use_container_width=True)
     with right:
-        st.write("Sortable inventory ledger")
+        st.write("Inventory ledger")
         table_columns = [
             "SKU",
             "Product_Name",
@@ -389,14 +622,10 @@ with stock_tab:
             "Inventory_Value",
             "Last_Restock_Date",
         ]
-        st.dataframe(
-            style_inventory_table(filtered[table_columns].sort_values("Quantity_On_Hand")),
-            use_container_width=True,
-            hide_index=True,
-            height=650,
-        )
+        st.table(style_inventory_table(filtered[table_columns].sort_values("Quantity_On_Hand")))
 
-with category_tab:
+if selected_view == "Category Analysis":
+    st.subheader("Category Analysis")
     category_summary = (
         filtered.groupby("Category", as_index=False)
         .agg(
@@ -437,7 +666,8 @@ with category_tab:
         hide_index=True,
     )
 
-with supplier_tab:
+if selected_view == "Supplier Analysis":
+    st.subheader("Supplier Analysis")
     supplier_summary = (
         filtered.groupby("Supplier", as_index=False)
         .agg(
@@ -487,7 +717,8 @@ with supplier_tab:
         hide_index=True,
     )
 
-with valuation_tab:
+if selected_view == "Inventory Valuation":
+    st.subheader("Inventory Valuation")
     category_value = filtered.groupby("Category", as_index=False)["Inventory_Value"].sum()
     supplier_value = filtered.groupby("Supplier", as_index=False)["Inventory_Value"].sum()
 
