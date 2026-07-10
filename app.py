@@ -1,8 +1,14 @@
 from pathlib import Path
+import base64
+import io
+import math
+import struct
+import wave
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 DATA_PATH = Path(__file__).with_name("data.csv")
@@ -24,6 +30,50 @@ def build_fallback_data() -> pd.DataFrame:
                 "Last_Restock_Date": "2026-06-01",
             }
         ]
+    )
+
+
+@st.cache_data
+def build_order_jingle() -> str:
+    sample_rate = 44100
+    tones = [
+        (659.25, 0.13),
+        (783.99, 0.13),
+        (987.77, 0.18),
+        (1318.51, 0.24),
+    ]
+    frames = bytearray()
+
+    for frequency, duration in tones:
+        frame_count = int(sample_rate * duration)
+        fade_frames = max(1, int(sample_rate * 0.015))
+
+        for index in range(frame_count):
+            fade_in = min(1.0, index / fade_frames)
+            fade_out = min(1.0, (frame_count - index) / fade_frames)
+            envelope = min(fade_in, fade_out)
+            sample = int(0.38 * envelope * 32767 * math.sin(2 * math.pi * frequency * index / sample_rate))
+            frames.extend(struct.pack("<h", sample))
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(sample_rate)
+        audio.writeframes(bytes(frames))
+
+    return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def play_order_jingle() -> None:
+    encoded_audio = build_order_jingle()
+    components.html(
+        f"""
+        <audio autoplay>
+            <source src="data:audio/wav;base64,{encoded_audio}" type="audio/wav">
+        </audio>
+        """,
+        height=0,
     )
 
 
@@ -292,6 +342,14 @@ else:
         use_container_width=True,
         hide_index=True,
     )
+    reorder_units = int(low_stock["Suggested_Reorder_Qty"].sum())
+    if st.button(
+        f"Place reorder for {len(low_stock):,} item(s)",
+        type="primary",
+        use_container_width=True,
+    ):
+        st.success(f"Order placed for {reorder_units:,} suggested units.")
+        play_order_jingle()
 
 stock_tab, category_tab, supplier_tab, valuation_tab = st.tabs(
     ["Stock Levels", "Category Analysis", "Supplier Analysis", "Inventory Valuation"]
