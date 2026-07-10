@@ -183,6 +183,220 @@ def render_rotating_banner(data: pd.DataFrame, low_stock_count: int, out_of_stoc
     )
 
 
+def render_live_ops_panel(data: pd.DataFrame, low_stock_count: int, out_of_stock_count: int) -> None:
+    watch_count = int((data["Quantity_On_Hand"] <= data["Reorder_Level"] * 1.5).sum())
+    inventory_value = format_currency(data["Inventory_Value"].sum())
+    activity_items = [
+        f"Stock scan completed for {data['SKU'].nunique():,} active SKU(s)",
+        f"{low_stock_count:,} reorder alert(s) are being watched",
+        f"{out_of_stock_count:,} out-of-stock item(s) need urgent action",
+        f"{watch_count:,} product(s) are near reorder threshold",
+        f"Current filtered inventory value is {inventory_value}",
+    ]
+    encoded_items = "||".join(escape(item) for item in activity_items)
+    components.html(
+        f"""
+        <style>
+            .live-shell {{
+                background: #0f172a;
+                border: 1px solid #1e293b;
+                border-radius: 8px;
+                color: #f8fafc;
+                font-family: Arial, sans-serif;
+                overflow: hidden;
+            }}
+            .live-top {{
+                align-items: center;
+                display: grid;
+                gap: 12px;
+                grid-template-columns: auto 1fr auto;
+                padding: 14px 16px;
+            }}
+            .live-dot {{
+                animation: pulseLive 1.2s infinite;
+                background: #22c55e;
+                border-radius: 999px;
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+                height: 12px;
+                width: 12px;
+            }}
+            .live-title {{
+                font-size: 16px;
+                font-weight: 800;
+            }}
+            .live-subtitle {{
+                color: #cbd5e1;
+                font-size: 13px;
+                margin-top: 3px;
+            }}
+            .live-time {{
+                color: #a7f3d0;
+                font-size: 14px;
+                font-weight: 800;
+                text-align: right;
+                white-space: nowrap;
+            }}
+            .live-grid {{
+                border-top: 1px solid #1e293b;
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+            }}
+            .live-cell {{
+                border-right: 1px solid #1e293b;
+                padding: 12px 16px;
+            }}
+            .live-cell:last-child {{
+                border-right: 0;
+            }}
+            .live-label {{
+                color: #94a3b8;
+                font-size: 12px;
+                font-weight: 800;
+                text-transform: uppercase;
+            }}
+            .live-value {{
+                font-size: 23px;
+                font-weight: 850;
+                margin-top: 4px;
+            }}
+            .activity-line {{
+                animation: glowLine 1.8s infinite;
+                background: #111827;
+                border-top: 1px solid #1e293b;
+                color: #e5e7eb;
+                font-size: 14px;
+                font-weight: 700;
+                min-height: 44px;
+                padding: 12px 16px;
+            }}
+            .sound-btn {{
+                background: #14b8a6;
+                border: 0;
+                border-radius: 8px;
+                color: #042f2e;
+                cursor: pointer;
+                font-weight: 850;
+                min-height: 36px;
+                padding: 0 12px;
+            }}
+            @keyframes pulseLive {{
+                0% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }}
+                70% {{ box-shadow: 0 0 0 11px rgba(34, 197, 94, 0); }}
+                100% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }}
+            }}
+            @keyframes glowLine {{
+                0%, 100% {{ background: #111827; }}
+                50% {{ background: #132033; }}
+            }}
+            @media (max-width: 720px) {{
+                .live-top,
+                .live-grid {{
+                    grid-template-columns: 1fr;
+                }}
+                .live-time {{
+                    text-align: left;
+                }}
+                .live-cell {{
+                    border-right: 0;
+                    border-top: 1px solid #1e293b;
+                }}
+            }}
+        </style>
+        <div class="live-shell">
+            <div class="live-top">
+                <div class="live-dot"></div>
+                <div>
+                    <div class="live-title">Live Inventory Control Room</div>
+                    <div class="live-subtitle">Activity feed, pulse status, and live local clock are running in real time.</div>
+                </div>
+                <div>
+                    <div class="live-time" id="live-clock">--:--:--</div>
+                    <button class="sound-btn" id="sound-toggle">Start live sounds</button>
+                </div>
+            </div>
+            <div class="live-grid">
+                <div class="live-cell">
+                    <div class="live-label">Low stock</div>
+                    <div class="live-value">{low_stock_count:,}</div>
+                </div>
+                <div class="live-cell">
+                    <div class="live-label">Out of stock</div>
+                    <div class="live-value">{out_of_stock_count:,}</div>
+                </div>
+                <div class="live-cell">
+                    <div class="live-label">Near threshold</div>
+                    <div class="live-value">{watch_count:,}</div>
+                </div>
+            </div>
+            <div class="activity-line" id="activity-line">Starting live operations feed...</div>
+        </div>
+        <script>
+            const activities = "{encoded_items}".split("||");
+            const clock = document.getElementById("live-clock");
+            const line = document.getElementById("activity-line");
+            const soundButton = document.getElementById("sound-toggle");
+            let index = 0;
+            let soundEnabled = false;
+            let audioContext = null;
+
+            function updateClock() {{
+                clock.textContent = new Date().toLocaleTimeString();
+            }}
+
+            function playTick() {{
+                if (!soundEnabled) return;
+                audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                oscillator.frequency.value = 880;
+                gain.gain.setValueAtTime(0.001, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.12, audioContext.currentTime + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.18);
+                oscillator.connect(gain);
+                gain.connect(audioContext.destination);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.2);
+            }}
+
+            function updateActivity() {{
+                line.textContent = activities[index % activities.length];
+                index += 1;
+                playTick();
+            }}
+
+            soundButton.addEventListener("click", async () => {{
+                soundEnabled = !soundEnabled;
+                soundButton.textContent = soundEnabled ? "Live sounds on" : "Start live sounds";
+                if (soundEnabled) {{
+                    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+                    await audioContext.resume();
+                    playTick();
+                }}
+            }});
+
+            updateClock();
+            updateActivity();
+            setInterval(updateClock, 1000);
+            setInterval(updateActivity, 2600);
+        </script>
+        """,
+        height=254,
+    )
+
+
+def enable_auto_refresh(seconds: int) -> None:
+    components.html(
+        f"""
+        <script>
+            setTimeout(() => {{
+                window.parent.location.reload();
+            }}, {seconds * 1000});
+        </script>
+        """,
+        height=0,
+    )
+
+
 @st.cache_data
 def load_data() -> pd.DataFrame:
     try:
@@ -340,6 +554,11 @@ st.markdown(
             background: #ffffff;
             box-shadow: 0 1px 3px rgba(17, 24, 39, 0.08);
             min-height: 116px;
+            transition: transform 160ms ease, box-shadow 160ms ease;
+        }
+        .kpi-card:hover {
+            box-shadow: 0 10px 24px rgba(17, 24, 39, 0.12);
+            transform: translateY(-3px);
         }
         .kpi-label {
             color: #6b7280;
@@ -361,6 +580,7 @@ st.markdown(
             margin-top: 0.25rem;
         }
         .alert-panel {
+            animation: alertPulse 2.4s infinite;
             background: #fff7ed;
             border: 1px solid #fdba74;
             border-left: 6px solid #ea580c;
@@ -464,6 +684,14 @@ st.markdown(
                 transform: translateY(0);
             }
         }
+        @keyframes alertPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 rgba(234, 88, 12, 0);
+            }
+            50% {
+                box-shadow: 0 0 0 4px rgba(234, 88, 12, 0.08);
+            }
+        }
         @media (max-width: 900px) {
             .banner-slide {
                 align-items: flex-start;
@@ -510,6 +738,9 @@ with st.sidebar:
     )
 
     st.divider()
+    live_mode = st.toggle("Live refresh", value=False)
+    refresh_seconds = st.slider("Refresh seconds", 10, 60, 20, disabled=not live_mode)
+    st.divider()
     st.caption("Download respects every active filter.")
 
 filtered = inventory[
@@ -540,6 +771,10 @@ if filtered.empty:
 low_stock = filtered[filtered["Quantity_On_Hand"] <= filtered["Reorder_Level"]].copy()
 out_of_stock = filtered[filtered["Quantity_On_Hand"] <= 0].copy()
 
+if live_mode:
+    enable_auto_refresh(refresh_seconds)
+
+render_live_ops_panel(filtered, len(low_stock), len(out_of_stock))
 render_rotating_banner(filtered, len(low_stock), len(out_of_stock))
 
 kpi_columns = st.columns(5)
