@@ -1,21 +1,25 @@
 # Inventory Management Dashboard
-## Live Link : https://inventorymanagementdashboard-6sdhkazti7hbjhpjx8wdt4.streamlit.app/
+
+## Live Link
+
+https://inventorymanagementdashboard-6sdhkazti7hbjhpjx8wdt4.streamlit.app/
 
 A Streamlit dashboard for monitoring warehouse inventory health, reorder risks, supplier exposure, and inventory valuation. The sample data is synthetic, but shaped like a realistic small-business inventory ledger with healthy, low-stock, and out-of-stock SKUs.
 
 ## Project Structure
 
 ```text
-Dashboard/
-├── app.py
-├── data.csv
-├── requirements.txt
-└── README.md
+inventorymanagementdashboard/
+|-- app.py
+|-- data.csv
+|-- requirements.txt
+|-- README.md
+|-- Create Storyline.md
 ```
 
 ## Local Setup
 
-From inside the `Dashboard` folder, run:
+From inside the project root folder, run:
 
 ```bash
 pip install -r requirements.txt
@@ -36,18 +40,16 @@ The app will open in your browser. If it does not open automatically, Streamlit 
 
 ### Streamlit Community Cloud
 
-1. Push the `Dashboard` folder to a GitHub repository.
+1. Push the project root folder to a GitHub repository.
 2. Go to `https://share.streamlit.io`.
-3. Choose the repository, branch, and set the main file path to `Dashboard/app.py`.
-4. Deploy. Streamlit Community Cloud will install packages from `Dashboard/requirements.txt`.
+3. Choose the repository, branch, and set the main file path to `app.py`.
+4. Deploy. Streamlit Community Cloud will install packages from `requirements.txt`.
 
 GitHub Pages cannot host this app because GitHub Pages only serves static sites, while Streamlit requires a running Python server.
 
-
-
 ### Alternatives
 
-- Render: create a web service, install from `requirements.txt`, and run `streamlit run Dashboard/app.py --server.port $PORT --server.address 0.0.0.0`.
+- Render: create a web service, install from `requirements.txt`, and run `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`.
 - Hugging Face Spaces: create a Streamlit Space and upload `app.py`, `data.csv`, and `requirements.txt`.
 
 ## Presentation Notes
